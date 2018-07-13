@@ -20,10 +20,15 @@ import com.google.api.client.http.json.JsonHttpContent;
 import com.google.api.client.json.JsonFactory;
 import com.google.api.client.json.jackson2.JacksonFactory;
 import com.google.common.io.CharStreams;
-import com.google.gson.Gson;
 
 public class BigQueryDemo {
 	
+	private static final String QUERY_URL_FORMAT = "https://www.googleapis.com/bigquery/v2/projects/%s/queries" + "?access_token=%s";
+
+	private static final String QUERY = "query";
+
+	private static final String QUERY_HACKER_NEWS_COMMENTS = "SELECT * FROM [bigquery-public-data:hacker_news.comments] LIMIT 1000";
+
 	private static final Logger logger = Logger.getLogger(BigQueryDemo.class);
 	
 	static GoogleCredential credential = null;
@@ -44,34 +49,31 @@ public class BigQueryDemo {
 		String projectId = credential.getServiceAccountProjectId();
 		String accessToken = generateAccessToken();
 		// Set the content of the request.
-		Dataset dataset = new Dataset().addLabel("query",
-				"SELECT * FROM " + "[bigquery-public-data:hacker_news.comments] " + "LIMIT 1000");
+		Dataset dataset = new Dataset().addLabel(QUERY,	QUERY_HACKER_NEWS_COMMENTS);
 		HttpContent content = new JsonHttpContent(JSON_FACTORY, dataset.getLabels());
-
 		// Send the request to the BigQuery API.
-		String urlFormat = "https://www.googleapis.com/bigquery/v2/projects/%s/queries" + "?access_token=%s";
-		GenericUrl url = new GenericUrl(String.format(urlFormat, projectId, accessToken));
+		GenericUrl url = new GenericUrl(String.format(QUERY_URL_FORMAT, projectId, accessToken));
 		logger.debug("URL: " + url.toString());
+		String responseJson = getQueryResult(content, url);
+		logger.debug(responseJson);
+	}
+
+	private static String getQueryResult(HttpContent content, GenericUrl url) {
+		String responseContent = null;
 		HttpRequestFactory requestFactory = HTTP_TRANSPORT.createRequestFactory();
 		HttpRequest request = null;
 		try {
 			request = requestFactory.buildPostRequest(url, content);
 			request.setParser(JSON_FACTORY.createJsonObjectParser());
-
-			// Workaround for transports which do not support PATCH requests.
-			// See: http://stackoverflow.com/a/32503192/101923
 			request.setHeaders(
 					new HttpHeaders().set("X-HTTP-Method-Override", "POST").setContentType("application/json"));
 			HttpResponse response = request.execute();
 			InputStream is = response.getContent();
-			String responseContent = CharStreams.toString(new InputStreamReader(is));
-			logger.debug(responseContent);
-			BigQueryResponseVO responseVO = new Gson().fromJson(responseContent, BigQueryResponseVO.class);
-			logger.debug("From Object: " + responseVO.kind);
+			responseContent = CharStreams.toString(new InputStreamReader(is));
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			logger.error(e);
 		}
+		return responseContent;
 	}
 
 	private static String generateAccessToken() {
